@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智谱AI-GLM-api-jwt-sdk-easy-demo</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+<body>
+
+  <!-- style -->
+  <style>
+    .boxed { width: 700px; max-width: 100%; margin-left: auto; margin-right: auto; }
+    h1,p { margin-bottom: 10px; }
+    .mb-50{ margin-bottom: 50px; }
+    .text-muted { color: #888 }
+    .text-small {font-size: 0.8em;}
+    input, textarea {width: 100%; border: 1px solid #ccc; border-radius: 4px;padding: 5px 10px; box-sizing: border-box;}
+    input {height: 30px;}
+    textarea {height: 170px; font-size: 12px;}
+  </style>
+
+  <!-- template -->
+  <div id="app" class="boxed" v-cloak>
+
+    <div class="mb-50">
+      <h1>
+        智谱AI-GLM-api-jwt-sdk-easy-demo
+      </h1>
+      <div class="text-muted text-small">
+        <p>
+          说明：<br>
+          a. 最新测试时间 2024-01-25，本文件测试可用（适用于智谱官方2023年12月后的新版鉴权方案）<br>
+          b. 这个demo是用Vue简单演示。你用任何框架或不用框架都行，复制核心的 jwtSign()、fetchTalk() 用就行。<br>
+          c. 生成的 token 是可自定义时长的，我用的缺省1小时（1000 * 60 * 60），你可能要根据自己业务去重新组织代码。<br>
+          d. 注意：把 API key 放到前端浏览器中是容易泄漏的，建议你在nodejs后端使用此文件的方法，或明确泄漏风险。<br>
+        <p>
+      </div>
+    </div>
+
+    <!-- step-01 api_key -->
+    <div class="mb-50">
+      <p>
+        <b>👉 01. 输入你的 API key</b>
+      </p>
+      <p>
+        <input 
+          type="text" 
+          v-model="api_key"
+          placeholder="API key，如: 1e9a8196d7e93079828c7f3e3c222db0.1xviOIMegcccW71i"
+        >
+        <br>
+        <span class="text-muted text-small">
+          tip: 从这里查看和创建API key：
+          <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank">
+            https://open.bigmodel.cn/usercenter/apikeys
+          </a>
+        </span>
+      </p>
+    </div>
+
+    <!-- step-02 post_body -->
+    <div class="mb-50">
+      <p>
+        <b>👉 02. 组织 Post body</b>
+      </p>
+      <p>
+        <textarea v-model="post_boby"></textarea>
+        <span class="text-muted text-small">
+          tip: 参数 "stream" 设为 true，则按流数据返回。设为 false，就是普通的 post 请求，普通读取其返回值就可以。
+        </span>
+      </p>
+    </div>
+
+    <!-- step-03 发送请求 -->
+    <div class="mb-50">
+      <p>
+        <b>👇发送请求</b>
+      </p>
+      <p>
+        <button @click="btnClicked()">Run</button>
+      </p>
+      <div>{{the_last_message}}</div>
+    </div>
+
+
+    <p></p>
+    <p></p>
+    <p></p>
+  </div>
+  
+  <!-- methods -->
+  <script>
+
+    if( !crypto.subtle ){
+      alert(`file:// or unsafe http:// is not allowed to use "crypto.subtle" functions,\n
+        you could run this file by Vite3 within the public dir.\n
+        file:// 或 不安全的 http:// 无法支持 "crypto.subtle" 方法运行，\n
+        把这个文件放到 Vite3 项目的 public 目录中可以运行。
+      `)
+    }
+
+    const_body_str = `{
+  "model": "glm-4",
+  "stream": "true",
+  "messages": [
+    {"role": "user", "content": "作为一名营销专家，请为我的产品创作一个吸引人的slogan"},
+    {"role": "assistant", "content": "当然，为了创作一个吸引人的slogan，请告诉我一些关于您产品的信息"},
+    {"role": "user", "content": "智谱AI开放平台"},
+    {"role": "assistant", "content": "智启未来，谱绘无限一智谱AI，让创新触手可及!"},
+    {"role": "user", "content": "创造一个更精准、吸引人的slogan，再附加一段文本介绍"}
+  ] 
+}`
+
+
+    const { createApp, ref } = Vue
+    createApp({
+      setup() {
+        const the_last_message = ref('这里是api返回的文本。')
+
+
+        const api_key = ref('')
+        const post_boby = ref(const_body_str)
+
+
+        // 01 - jwtSign 方法：独立方法，可以用来生成JWT签名。（智谱AI 需要的请求头中的 Authorization 字段）
+        const jwtSign = async function (secret, payload, my_header) {
+          const header = my_header || { alg: 'HS256', sign_type: 'SIGN' };
+          const encodedHeader = btoa(JSON.stringify(header));
+          const encodedPayload = btoa(JSON.stringify(payload));
+
+          if(!secret){
+            console.log('secret is empty, returned.')
+            return
+          }
+
+          // load secret
+          const key = await crypto.subtle.importKey(
+            'raw',
+            new TextEncoder().encode(secret),
+            { name: 'HMAC', hash: { name: 'SHA-256' } },
+            false,
+            ['sign']
+          );
+
+          // sing
+          const signature = await crypto.subtle.sign(
+            'HMAC',
+            key,
+            new TextEncoder().encode(encodedHeader + '.' + encodedPayload)
+          );
+
+          // ArrayBuffer to Base64 
+          const encodedSignature = btoa(String.fromCharCode.apply(null, new Uint8Array(signature)));
+          return encodedHeader + '.' + encodedPayload + '.' + encodedSignature;
+        }
+
+
+        // 02 - fetchTalk 方法：独立方法，就是fetch，用于读原始返回流数据块。（像 openai、智谱，都支持 stream 流数据）
+        const fetchTalk = async (post_headers, post_body, callback_on_stream ) => {
+
+          let res = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+            method: 'post',
+            headers: post_headers,
+            body: typeof post_body === 'object' ? JSON.stringify(post_body) : post_boby
+          })
+          
+          
+          // handle stream data
+          const reader = res.body.getReader();
+          let buffer = '';
+
+          const fn_handelStream = async (reader) => {
+
+            const res_stream = await reader.read()
+
+            if (res_stream.done) {
+              console.log('Stream closed');
+              return
+            } else {
+              buffer += new TextDecoder('utf-8').decode(res_stream.value);
+              const lines = buffer.split('\n\n');
+              buffer = lines.pop();
+
+              for (let i in lines) {
+                const line = lines[i]
+
+                // console.log(line);
+                if(callback_on_stream){
+                  callback_on_stream(line)
+                }
+              }
+              return fn_handelStream(reader)
+            }
+          }
+          // 可选 -> await fn_handelStream(reader)
+          fn_handelStream(reader)
+        }
+
+
+        // 03 - handleStreamChunk 方法：独立方法，用于处理原始流数据块。（一般由页面UI传入，处理最后的UI数据渲染）
+        const handleStreamChunk = function(chunk) {
+          
+          // 注意：这里的chunk是原始流数据块格式（`data:  ...\n\n`），你需要根据你的具体业务具体处理。
+          console.log(chunk);
+
+          let temp_obj = JSON.parse(chunk.replace(/^data: /, '').replace('\n\n$', ''))
+          the_last_message.value += (temp_obj.choices || [{}])[0]?.delta?.content || ''
+
+        }
+        
+
+        // UI-on-click
+        const btnClicked = async () => {
+
+          if(api_key.value === ''){
+            alert('please set api_key.\n填写api_key')
+            return 
+          }
+
+          the_last_message.value = ''
+
+          // 01 调用jwtSign方法，获取jwt签名
+          let [id, secret] = api_key.value.split('.')
+          let st = new Date().valueOf()
+          let res_auth_token = await jwtSign(
+            secret,
+            {
+              "api_key": id,
+              "timestamp": st,
+              "exp": new Date(st + 1000 * 60 * 60).valueOf(),
+            }
+          )
+          console.log('01 res_auth_token: ' + res_auth_token)
+
+          // 02 调用 fetchTalk 方法，获取读取api数据
+          let my_headers = {
+            'Authorization': res_auth_token,
+            "content-type": "application/json",
+          }
+          let my_body = JSON.parse(post_boby.value)
+          fetchTalk( my_headers, my_body, handleStreamChunk)
+
+
+        }
+        return {
+          the_last_message,
+          api_key,
+          post_boby,
+          btnClicked,
+        }
+      }
+    }).mount('#app')
+  </script>
+</body>
+</html>
