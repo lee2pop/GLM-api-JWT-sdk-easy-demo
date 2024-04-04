@@ -198,7 +198,7 @@
         }
 
 
-        // 03 - handleStreamChunk 方法：独立方法，用于处理原始流数据块。（一般由页面UI传入，处理最后的UI数据渲染）
+        // 03 - handleStreamChunk 方法：UI处理流数据的具体方法。（此函数一般由具体UI页面定义，执行fetchTalk时，传参为回调函数。可用来处理最后的UI数据渲染。）
         const handleStreamChunk = function(chunk) {
           
           // 注意：这里的chunk是原始流数据块格式（`data:  ...\n\n`），你需要根据你的具体业务具体处理。
@@ -210,7 +210,7 @@
         }
         
 
-        // UI-on-click
+        // 交互入口：UI-on-click
         const btnClicked = async () => {
 
           if(api_key.value === ''){
@@ -241,8 +241,9 @@
           let my_body = JSON.parse(post_boby.value)
           fetchTalk( my_headers, my_body, handleStreamChunk)
 
-
         }
+        
+        // vue-return
         return {
           the_last_message,
           api_key,
